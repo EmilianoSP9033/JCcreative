@@ -1,0 +1,502 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PrintZone - Catálogo de Productos</title>
+    <style>
+        :root {
+            --primary: #2563eb;
+            --primary-hover: #1d4ed8;
+            --bg: #f8fafc;
+            --text: #0f172a;
+            --text-light: #64748b;
+            --border: #e2e8f0;
+            --card-bg: #ffffff;
+        }
+        
+        * { 
+            box-sizing: border-box; 
+            margin: 0; 
+            padding: 0; 
+            font-family: 'Segoe UI', system-ui, -apple-system, sans-serif; 
+        }
+        
+        body { 
+            background-color: var(--bg); 
+            color: var(--text); 
+            line-height: 1.5; 
+        }
+        
+        .container { 
+            max-width: 1200px; 
+            margin: 0 auto; 
+            padding: 3rem 1.5rem; 
+        }
+        
+        header { 
+            text-align: center; 
+            margin-bottom: 2.5rem; 
+        }
+        
+        h1 { 
+            font-size: 2.5rem; 
+            margin-bottom: 0.5rem; 
+            color: var(--text); 
+            font-weight: 800;
+            letter-spacing: -0.025em;
+        }
+        
+        /* Search */
+        .search-container { 
+            max-width: 500px; 
+            margin: 0 auto 2.5rem; 
+            position: relative; 
+        }
+        
+        .search-input { 
+            width: 100%; 
+            padding: 1rem 1.5rem; 
+            border: 2px solid var(--border); 
+            border-radius: 9999px; 
+            font-size: 1rem; 
+            outline: none; 
+            transition: all 0.3s ease; 
+            box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05);
+        }
+        
+        .search-input:focus { 
+            border-color: var(--primary); 
+            box-shadow: 0 4px 12px rgba(37, 99, 235, 0.15);
+        }
+        
+        /* Categories */
+        .categories { 
+            display: flex; 
+            flex-wrap: wrap; 
+            gap: 0.75rem; 
+            justify-content: center; 
+            margin-bottom: 3rem; 
+        }
+        
+        .category-btn { 
+            padding: 0.6rem 1.5rem; 
+            background: var(--card-bg); 
+            border: 1px solid var(--border); 
+            border-radius: 9999px; 
+            cursor: pointer; 
+            font-size: 0.95rem; 
+            font-weight: 600; 
+            color: var(--text-light); 
+            transition: all 0.3s ease; 
+            box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+        }
+        
+        .category-btn:hover { 
+            border-color: var(--primary); 
+            color: var(--primary); 
+            transform: translateY(-1px);
+        }
+        
+        .category-btn.active { 
+            background: var(--primary); 
+            color: white; 
+            border-color: var(--primary); 
+            box-shadow: 0 4px 6px -1px rgba(37, 99, 235, 0.3);
+        }
+        
+        /* Grid */
+        .grid { 
+            display: grid; 
+            grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); 
+            gap: 2rem; 
+        }
+        
+        /* Card */
+        .card { 
+            background: var(--card-bg); 
+            border-radius: 1.25rem; 
+            overflow: hidden; 
+            box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05), 0 2px 4px -1px rgba(0,0,0,0.03); 
+            transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.3s ease; 
+            opacity: 1; 
+            transform: translateY(0); 
+            display: flex;
+            flex-direction: column;
+        }
+        
+        .card:hover { 
+            transform: translateY(-8px); 
+            box-shadow: 0 20px 25px -5px rgba(0,0,0,0.1), 0 10px 10px -5px rgba(0,0,0,0.04); 
+        }
+        
+        .card img { 
+            width: 100%; 
+            height: 220px; 
+            object-fit: cover; 
+            background: #e2e8f0; 
+            border-bottom: 1px solid var(--border);
+        }
+        
+        .card-content { 
+            padding: 1.5rem; 
+            flex-grow: 1;
+            display: flex;
+            flex-direction: column;
+        }
+        
+        .card-title { 
+            font-size: 1.25rem; 
+            font-weight: 700; 
+            margin-bottom: 0.5rem; 
+            color: var(--text);
+        }
+        
+        .card-desc { 
+            color: var(--text-light); 
+            font-size: 0.95rem; 
+            margin-bottom: 1.5rem; 
+            flex-grow: 1;
+        }
+        
+        .btn { 
+            display: inline-block; 
+            width: 100%; 
+            padding: 0.875rem; 
+            background: var(--primary); 
+            color: white; 
+            text-align: center; 
+            border: none; 
+            border-radius: 0.75rem; 
+            font-weight: 600; 
+            font-size: 1rem;
+            cursor: pointer; 
+            transition: background 0.3s, transform 0.1s; 
+        }
+        
+        .btn:hover { 
+            background: var(--primary-hover); 
+        }
+        
+        .btn:active {
+            transform: scale(0.98);
+        }
+        
+        /* Animation classes */
+        .fade-enter { 
+            animation: fadeIn 0.5s cubic-bezier(0.4, 0, 0.2, 1) forwards; 
+            opacity: 0;
+        }
+        
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(20px) scale(0.95); }
+            to { opacity: 1; transform: translateY(0) scale(1); }
+        }
+        
+        /* Modal */
+        .modal-overlay { 
+            position: fixed; 
+            top: 0; 
+            left: 0; 
+            right: 0; 
+            bottom: 0; 
+            background: rgba(15, 23, 42, 0.6); 
+            backdrop-filter: blur(4px);
+            display: flex; 
+            align-items: center; 
+            justify-content: center; 
+            opacity: 0; 
+            pointer-events: none; 
+            transition: opacity 0.3s ease; 
+            z-index: 50; 
+            padding: 1rem; 
+        }
+        
+        .modal-overlay.active { 
+            opacity: 1; 
+            pointer-events: all; 
+        }
+        
+        .modal { 
+            background: var(--card-bg); 
+            width: 100%; 
+            max-width: 500px; 
+            border-radius: 1.5rem; 
+            padding: 2rem; 
+            transform: scale(0.95) translateY(20px); 
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); 
+            box-shadow: 0 25px 50px -12px rgba(0,0,0,0.25);
+        }
+        
+        .modal-overlay.active .modal { 
+            transform: scale(1) translateY(0); 
+        }
+        
+        .modal-header { 
+            display: flex; 
+            justify-content: space-between; 
+            align-items: flex-start; 
+            margin-bottom: 1.5rem; 
+        }
+        
+        .modal-title { 
+            font-size: 1.5rem; 
+            font-weight: 700; 
+            line-height: 1.2;
+            color: var(--text);
+        }
+        
+        .close-btn { 
+            background: var(--bg); 
+            border: none; 
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.5rem; 
+            cursor: pointer; 
+            color: var(--text-light); 
+            transition: all 0.2s;
+        }
+        
+        .close-btn:hover {
+            background: #e2e8f0;
+            color: var(--text);
+        }
+        
+        .form-group { 
+            margin-bottom: 1.25rem; 
+        }
+        
+        .form-group label { 
+            display: block; 
+            margin-bottom: 0.5rem; 
+            font-weight: 600; 
+            font-size: 0.9rem; 
+            color: var(--text);
+        }
+        
+        .form-control { 
+            width: 100%; 
+            padding: 0.875rem 1rem; 
+            border: 1px solid var(--border); 
+            border-radius: 0.75rem; 
+            font-family: inherit; 
+            font-size: 1rem;
+            transition: border-color 0.2s;
+            background: var(--bg);
+        }
+        
+        .form-control:focus {
+            outline: none;
+            border-color: var(--primary);
+            background: white;
+        }
+        
+        textarea.form-control { 
+            resize: vertical; 
+            min-height: 120px; 
+        }
+        
+        @media (max-width: 640px) {
+            h1 { font-size: 2rem; }
+            .categories { 
+                flex-wrap: nowrap; 
+                overflow-x: auto; 
+                justify-content: flex-start; 
+                padding-bottom: 1rem; 
+                scrollbar-width: none; 
+                -ms-overflow-style: none;
+            }
+            .categories::-webkit-scrollbar { display: none; }
+            .category-btn { flex-shrink: 0; }
+            .modal { padding: 1.5rem; }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Catálogo de Productos</h1>
+            <p style="color: var(--text-light); font-size: 1.1rem;">Descubre nuestra selección de productos personalizables</p>
+        </header>
+        
+        <div class="search-container">
+            <input type="text" id="searchInput" class="search-input" placeholder="🔍 Buscar productos por nombre...">
+        </div>
+        
+        <div class="categories" id="categoryContainer">
+            <!-- Categories injected here via JS -->
+        </div>
+        
+        <div class="grid" id="productGrid">
+            <!-- Products injected here via JS -->
+        </div>
+    </div>
+
+    <!-- Modal -->
+    <div class="modal-overlay" id="modalOverlay">
+        <div class="modal">
+            <div class="modal-header">
+                <h2 class="modal-title" id="modalTitle">Personalizar Producto</h2>
+                <button class="close-btn" id="closeModal">&times;</button>
+            </div>
+            <form id="quoteForm">
+                <input type="hidden" id="productNameInput">
+                <div class="form-group">
+                    <label for="customerName">Nombre del cliente</label>
+                    <input type="text" id="customerName" class="form-control" placeholder="Ej. Juan Pérez" required>
+                </div>
+                <div class="form-group">
+                    <label for="quantity">Cantidad</label>
+                    <input type="number" id="quantity" class="form-control" min="1" value="1" required>
+                </div>
+                <div class="form-group">
+                    <label for="notes">Notas adicionales</label>
+                    <textarea id="notes" class="form-control" placeholder="Tallas, colores, detalles del diseño, etc..."></textarea>
+                </div>
+                <button type="submit" class="btn" style="margin-top: 0.5rem;">Enviar Solicitud</button>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        // Datos de productos
+        const products = [
+            { id: 1, name: "Camisa manga corta", category: "Camisas", desc: "Camisa de algodón 100% ideal para bordado o serigrafía. Variedad de colores.", img: "https://images.unsplash.com/photo-1596755094514-f87e32f85e23?auto=format&fit=crop&w=600&q=80" },
+            { id: 2, name: "Camisa de vestir", category: "Camisas", desc: "Camisa formal manga larga, perfecta para uniformes corporativos y ejecutivos.", img: "https://images.unsplash.com/photo-1602810318383-e386cc2a3ce5?auto=format&fit=crop&w=600&q=80" },
+            { id: 3, name: "Gorra trucker", category: "Gorras", desc: "Gorra con malla trasera transpirable, excelente para sublimación frontal.", img: "https://images.unsplash.com/photo-1588850561407-ed78c282e89b?auto=format&fit=crop&w=600&q=80" },
+            { id: 4, name: "Gorra snapback", category: "Gorras", desc: "Gorra de visera plana estructurada, ideal para bordado 3D de alta calidad.", img: "https://images.unsplash.com/photo-1556306535-0f09a536f01f?auto=format&fit=crop&w=600&q=80" },
+            { id: 5, name: "Lona 2x3 m", category: "Lonas y Banners", desc: "Lona impresa en alta resolución con ojillos metálicos lista para colgar.", img: "https://images.unsplash.com/photo-1562613531-a2fa2b8006e2?auto=format&fit=crop&w=600&q=80" },
+            { id: 6, name: "Banner roll-up", category: "Lonas y Banners", desc: "Estructura de aluminio con lona enrollable, fácil de transportar para eventos.", img: "https://images.unsplash.com/photo-1542744173-8e7e53415bb0?auto=format&fit=crop&w=600&q=80" },
+            { id: 7, name: "Polo básica", category: "Playeras Polo", desc: "Playera tipo polo en mezcla de algodón y poliéster. Duradera y cómoda.", img: "https://images.unsplash.com/photo-1586363104862-3a5e2ab60d99?auto=format&fit=crop&w=600&q=80" },
+            { id: 8, name: "Polo premium dry-fit", category: "Playeras Polo", desc: "Tela transpirable ideal para deportes o trabajo en exteriores intensos.", img: "https://images.unsplash.com/photo-1620799140408-edc6dcb6d633?auto=format&fit=crop&w=600&q=80" },
+            { id: 9, name: "Taza blanca 11oz", category: "Tazas", desc: "Taza clásica de cerámica lista para sublimar con tu logo o fotografía.", img: "https://images.unsplash.com/photo-1514228742587-6b1558fcca3d?auto=format&fit=crop&w=600&q=80" },
+            { id: 10, name: "Taza mágica", category: "Tazas", desc: "Taza negra mate que revela tu diseño a todo color al verter líquido caliente.", img: "https://images.unsplash.com/photo-1577803645773-f96470509666?auto=format&fit=crop&w=600&q=80" },
+            { id: 11, name: "Sticker troquelado", category: "Calcomanías", desc: "Calcomanías de vinil cortadas con la forma exacta de tu diseño. Resistentes al agua.", img: "https://images.unsplash.com/photo-1572375992501-4b0892d50c69?auto=format&fit=crop&w=600&q=80" },
+            { id: 12, name: "Planilla de stickers", category: "Calcomanías", desc: "Hoja tamaño carta con múltiples calcomanías pre-cortadas listas para despegar.", img: "https://images.unsplash.com/photo-1586880244406-556ebe35f282?auto=format&fit=crop&w=600&q=80" }
+        ];
+
+        const categories = ["Todos", "Camisas", "Gorras", "Lonas y Banners", "Playeras Polo", "Tazas", "Calcomanías"];
+        
+        // Estado
+        let currentCategory = "Todos";
+        let searchTerm = "";
+
+        // Elementos del DOM
+        const grid = document.getElementById('productGrid');
+        const categoryContainer = document.getElementById('categoryContainer');
+        const searchInput = document.getElementById('searchInput');
+        
+        const modalOverlay = document.getElementById('modalOverlay');
+        const closeModalBtn = document.getElementById('closeModal');
+        const quoteForm = document.getElementById('quoteForm');
+        const productNameInput = document.getElementById('productNameInput');
+        const modalTitle = document.getElementById('modalTitle');
+
+        // Renderizar botones de categorías
+        function renderCategories() {
+            categoryContainer.innerHTML = categories.map(cat => 
+                `<button class="category-btn ${currentCategory === cat ? 'active' : ''}" onclick="setCategory('${cat}')">${cat}</button>`
+            ).join('');
+        }
+
+        // Cambiar categoría
+        window.setCategory = function(cat) {
+            currentCategory = cat;
+            renderCategories();
+            renderProducts();
+        };
+
+        // Búsqueda
+        searchInput.addEventListener('input', (e) => {
+            searchTerm = e.target.value.toLowerCase();
+            renderProducts();
+        });
+
+        // Renderizar grid de productos
+        function renderProducts() {
+            grid.innerHTML = '';
+            
+            const filtered = products.filter(p => {
+                const matchCategory = currentCategory === "Todos" || p.category === currentCategory;
+                const matchSearch = p.name.toLowerCase().includes(searchTerm);
+                return matchCategory && matchSearch;
+            });
+
+            if (filtered.length === 0) {
+                grid.innerHTML = `
+                    <div style="grid-column: 1/-1; text-align: center; padding: 4rem 2rem; background: var(--card-bg); border-radius: 1rem;">
+                        <p style="color: var(--text-light); font-size: 1.1rem;">No se encontraron productos que coincidan con tu búsqueda.</p>
+                    </div>
+                `;
+                return;
+            }
+
+            filtered.forEach((p, index) => {
+                const card = document.createElement('div');
+                card.className = 'card fade-enter';
+                // Escalonar la animación
+                card.style.animationDelay = `${index * 0.05}s`;
+                
+                card.innerHTML = `
+                    <img src="${p.img}" alt="${p.name}" loading="lazy">
+                    <div class="card-content">
+                        <h3 class="card-title">${p.name}</h3>
+                        <p class="card-desc">${p.desc}</p>
+                        <button class="btn" onclick="openModal('${p.name}')">Personalizar</button>
+                    </div>
+                `;
+                grid.appendChild(card);
+            });
+        }
+
+        // Lógica del Modal
+        window.openModal = function(productName) {
+            modalTitle.textContent = `Personalizar: ${productName}`;
+            productNameInput.value = productName;
+            modalOverlay.classList.add('active');
+            document.body.style.overflow = 'hidden'; // Prevenir scroll de fondo
+        };
+
+        function closeModal() {
+            modalOverlay.classList.remove('active');
+            document.body.style.overflow = '';
+            setTimeout(() => quoteForm.reset(), 300); // Limpiar form después de la animación
+        }
+
+        closeModalBtn.addEventListener('click', closeModal);
+        
+        modalOverlay.addEventListener('click', (e) => {
+            if (e.target === modalOverlay) closeModal();
+        });
+
+        // Envío del formulario
+        quoteForm.addEventListener('submit', (e) => {
+            e.preventDefault();
+            const name = document.getElementById('customerName').value;
+            const product = productNameInput.value;
+            const qty = document.getElementById('quantity').value;
+            
+            // Simular envío
+            const btn = quoteForm.querySelector('.btn');
+            const originalText = btn.textContent;
+            btn.textContent = 'Enviando...';
+            btn.style.opacity = '0.8';
+            
+            setTimeout(() => {
+                alert(`¡Gracias ${name}!\n\nHemos recibido tu solicitud para personalizar ${qty} unidad(es) de "${product}".\n\nNos pondremos en contacto contigo muy pronto para los detalles del diseño.`);
+                btn.textContent = originalText;
+                btn.style.opacity = '1';
+                closeModal();
+            }, 800);
+        });
+
+        // Inicialización
+        renderCategories();
+        renderProducts();
+    </script>
+</body>
+</html>
