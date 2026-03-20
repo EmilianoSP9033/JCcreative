@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Search, Filter, Palette } from 'lucide-react';
+import { Search, Filter, PenTool, MessageCircle, Palette } from 'lucide-react';
 import { motion } from 'motion/react';
 import { Screen, Product } from '../types';
 
@@ -8,18 +8,18 @@ interface CatalogProps {
 }
 
 const products: Product[] = [
-  { id: '1', name: 'Camiseta Premium Algodón', category: 'Camisas', price: 24.99, image: 'https://images.unsplash.com/photo-1521572163474-6864f9cf17ab?auto=format&fit=crop&q=80&w=800', variants: ['Cuello Redondo', 'Cuello V'], type: 'apparel' },
-  { id: '2', name: 'Camisa Polo Ejecutiva', category: 'Camisas', price: 34.50, image: 'https://images.unsplash.com/photo-1586363104862-3a5e2ab60d99?auto=format&fit=crop&q=80&w=800', variants: ['Algodón', 'Dry-Fit'], type: 'apparel' },
-  { id: '3', name: 'Gorra Trucker', category: 'Gorras', price: 15.00, image: 'https://images.unsplash.com/photo-1588850561407-ed78c282e89b?auto=format&fit=crop&q=80&w=800', variants: ['Malla Trasera', 'Frente Blanco'], type: 'apparel' },
-  { id: '4', name: 'Gorra Snapback', category: 'Gorras', price: 18.50, image: 'https://images.unsplash.com/photo-1556306535-0f09a536f01f?auto=format&fit=crop&q=80&w=800', variants: ['Visera Plana', 'Estructurada'], type: 'apparel' },
-  { id: '5', name: 'Taza Cerámica 11oz', category: 'Tazas', price: 12.00, image: 'https://images.unsplash.com/photo-1514228742587-6b1558fcca3d?auto=format&fit=crop&q=80&w=800', variants: ['Blanca', 'Interior Color'], type: 'mug' },
-  { id: '6', name: 'Taza Mágica', category: 'Tazas', price: 16.00, image: 'https://images.unsplash.com/photo-1577803645773-f96470509666?auto=format&fit=crop&q=80&w=800', variants: ['Negro Mate'], type: 'mug' },
-  { id: '7', name: 'Lona Publicitaria', category: 'Lonas', price: 45.00, image: 'https://images.unsplash.com/photo-1562613531-a2fa2b8006e2?auto=format&fit=crop&q=80&w=800', variants: ['2x1m', '3x2m', '4x3m'], type: 'banner' },
-  { id: '8', name: 'Sudadera con Capucha', category: 'Sudaderas', price: 39.99, image: 'https://images.unsplash.com/photo-1556821840-3a63f95609a7?auto=format&fit=crop&q=80&w=800', variants: ['Con Cierre', 'Cerrada'], type: 'apparel' },
-  { id: '9', name: 'Stickers Troquelados', category: 'Calcomanías', price: 0.50, image: 'https://images.unsplash.com/photo-1572375992501-4b0892d50c69?auto=format&fit=crop&q=80&w=800', variants: ['Mate', 'Brillante', 'Holográfico'], type: 'sticker' },
+  { id: '1', name: 'Tarjetas de Presentación', category: 'Tarjetas', price: 199.00, image: 'https://picsum.photos/seed/cards/800/600', variants: ['Mate', 'Brillante', 'Texturizado'], type: 'apparel' },
+  { id: '2', name: 'Lonas Publicitarias', category: 'Lonas', price: 299.00, image: 'https://picsum.photos/seed/banner/800/600', variants: ['1x1m', '2x1m', '3x2m'], type: 'banner' },
+  { id: '3', name: 'Playeras Personalizadas', category: 'Playeras', price: 189.00, image: 'https://picsum.photos/seed/tshirt/800/600', variants: ['Algodón', 'Dry-Fit'], type: 'apparel' },
+  { id: '4', name: 'Flyers Promocionales', category: 'Flyers', price: 59.00, image: 'https://picsum.photos/seed/flyer/800/600', variants: ['Media Carta', 'Cuarto de Carta'], type: 'apparel' },
+  { id: '5', name: 'Sellos de Goma', category: 'Sellos', price: 150.00, image: 'https://picsum.photos/seed/stamp/800/600', variants: ['Madera', 'Automático'], type: 'apparel' },
+  { id: '6', name: 'Tazas Sublimadas', category: 'Tazas', price: 129.00, image: 'https://picsum.photos/seed/mug/800/600', variants: ['Blanca', 'Mágica', 'Interior Color'], type: 'mug' },
+  { id: '7', name: 'Stickers Troquelados', category: 'Stickers', price: 49.00, image: 'https://picsum.photos/seed/sticker/800/600', variants: ['Mate', 'Brillante', 'Holográfico'], type: 'sticker' },
+  { id: '8', name: 'Banners Roll-up', category: 'Banners', price: 399.00, image: 'https://picsum.photos/seed/rollup/800/600', variants: ['80x200cm', '85x200cm'], type: 'banner' },
+  { id: '9', name: 'Calendarios', category: 'Calendarios', price: 89.00, image: 'https://picsum.photos/seed/calendar/800/600', variants: ['Pared', 'Escritorio', 'Bolsillo'], type: 'apparel' },
 ];
 
-const categories = ['Todos', 'Camisas', 'Gorras', 'Tazas', 'Lonas', 'Sudaderas', 'Calcomanías'];
+const categories = ['Todos', 'Tarjetas', 'Lonas', 'Playeras', 'Flyers', 'Sellos', 'Tazas', 'Stickers', 'Banners', 'Calendarios'];
 
 export default function Catalog({ onNavigate }: CatalogProps) {
   const [activeCategory, setActiveCategory] = useState('Todos');
@@ -32,93 +32,109 @@ export default function Catalog({ onNavigate }: CatalogProps) {
   });
 
   return (
-    <div className="max-w-7xl mx-auto px-4 py-12">
-      <div className="flex flex-col md:flex-row gap-8">
-        {/* Sidebar */}
-        <motion.aside 
-          initial={{ opacity: 0, x: -20 }}
-          animate={{ opacity: 1, x: 0 }}
-          className="w-full md:w-64 shrink-0"
-        >
-          <div className="sticky top-24">
-            <h2 className="text-xl font-bold mb-6 flex items-center gap-2 text-slate-900 dark:text-white">
-              <Filter size={20} className="text-blue-500" /> Categorías
-            </h2>
-            <div className="flex flex-row md:flex-col gap-2 overflow-x-auto pb-4 md:pb-0 scrollbar-hide">
-              {categories.map((cat, i) => (
-                <motion.button
-                  key={cat}
-                  initial={{ opacity: 0, x: -10 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  transition={{ delay: i * 0.05 }}
-                  onClick={() => setActiveCategory(cat)}
-                  className={`px-4 py-3 rounded-xl text-left font-medium transition-all whitespace-nowrap ${
-                    activeCategory === cat 
-                      ? 'bg-blue-600 text-white shadow-md shadow-blue-500/20 scale-105' 
-                      : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 hover:scale-105'
-                  }`}
-                >
-                  {cat}
-                </motion.button>
-              ))}
+    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12 md:py-20">
+      
+      <div className="text-center mb-12">
+        <h1 className="text-4xl md:text-5xl font-display font-bold text-slate-900 dark:text-white mb-4">
+          Nuestro Catálogo
+        </h1>
+        <p className="text-slate-600 dark:text-slate-400 max-w-2xl mx-auto">
+          Explora nuestra amplia gama de productos impresos de alta calidad. Personaliza en línea o solicita una cotización.
+        </p>
+      </div>
+
+      <div className="flex flex-col lg:flex-row gap-8 lg:gap-12">
+        {/* Sidebar / Filters */}
+        <aside className="w-full lg:w-64 shrink-0">
+          <div className="sticky top-28">
+            <div className="relative mb-8">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={20} />
+              <input
+                type="text"
+                placeholder="Buscar productos..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-full pl-10 pr-4 py-3 bg-white dark:bg-[#0D1B3E] border border-slate-200 dark:border-slate-800 rounded-xl text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-[#00E5FF] focus:border-transparent transition-all shadow-sm"
+              />
+            </div>
+
+            <div className="bg-white dark:bg-[#0D1B3E] rounded-2xl p-6 shadow-sm border border-slate-100 dark:border-slate-800/50">
+              <h2 className="text-sm font-bold uppercase tracking-wider mb-4 flex items-center gap-2 text-slate-900 dark:text-white">
+                <Filter size={16} className="text-[#00E5FF]" /> Categorías
+              </h2>
+              <div className="flex flex-row lg:flex-col gap-2 overflow-x-auto pb-2 lg:pb-0 scrollbar-hide">
+                {categories.map((cat) => {
+                  const isActive = activeCategory === cat;
+                  return (
+                    <button
+                      key={cat}
+                      onClick={() => setActiveCategory(cat)}
+                      className={`px-4 py-2 rounded-lg text-sm font-semibold transition-all whitespace-nowrap text-left ${
+                        isActive 
+                          ? 'bg-[#FFD700] text-slate-900 dark:bg-[#00E5FF] dark:text-slate-900 shadow-md' 
+                          : 'text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800/50 hover:text-slate-900 dark:hover:text-white'
+                      }`}
+                    >
+                      {cat}
+                    </button>
+                  );
+                })}
+              </div>
             </div>
           </div>
-        </motion.aside>
+        </aside>
 
         {/* Main Content */}
         <div className="flex-1">
-          <motion.div 
-            initial={{ opacity: 0, y: -20 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="mb-8 relative"
-          >
-            <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={20} />
-            <input
-              type="text"
-              placeholder="Buscar productos..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-12 pr-4 py-4 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 transition-all shadow-sm"
-            />
-          </motion.div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+          <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-6 md:gap-8">
             {filteredProducts.map((product, i) => (
               <motion.div
                 key={product.id}
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: i * 0.05 }}
-                className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl overflow-hidden group flex flex-col shadow-sm hover:shadow-md transition-shadow"
+                className="group flex flex-col bg-white dark:bg-[#0D1B3E] rounded-2xl overflow-hidden shadow-md hover:shadow-xl dark:shadow-none dark:border dark:border-slate-800 hover:dark:border-[#00E5FF]/50 hover:dark:shadow-[0_0_20px_rgba(0,229,255,0.15)] transition-all duration-300 border-t-4 border-t-[#FFD700] dark:border-t-transparent"
               >
-                <div className="aspect-square overflow-hidden relative bg-slate-100 dark:bg-slate-700">
+                <div className="aspect-[4/3] overflow-hidden relative bg-slate-100 dark:bg-slate-800">
                   <img 
                     src={product.image} 
                     alt={product.name} 
-                    className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500 opacity-90 group-hover:opacity-100"
+                    className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
                     referrerPolicy="no-referrer"
                   />
-                  <div className="absolute top-3 left-3 px-2 py-1 bg-white/80 dark:bg-slate-900/80 backdrop-blur-sm text-xs font-bold rounded text-slate-700 dark:text-slate-300">
+                  <div className="absolute top-3 right-3 bg-white/90 dark:bg-slate-900/90 backdrop-blur-sm px-3 py-1 rounded-full text-xs font-bold text-slate-900 dark:text-white shadow-sm">
                     {product.category}
                   </div>
                 </div>
                 
-                <div className="p-5 flex-1 flex flex-col">
-                  <h3 className="text-lg font-bold text-slate-900 dark:text-white mb-1">{product.name}</h3>
-                  <p className="text-sm text-slate-500 dark:text-slate-400 mb-4 line-clamp-1">
-                    Variantes: {product.variants.join(', ')}
-                  </p>
+                <div className="p-6 flex flex-col flex-1">
+                  <h3 className="text-lg font-display font-bold text-slate-900 dark:text-white mb-2 line-clamp-2">
+                    {product.name}
+                  </h3>
                   
-                  <div className="mt-auto flex items-center justify-between">
+                  <div className="mt-auto pt-4 flex items-end justify-between mb-6">
                     <div>
-                      <p className="text-xs text-slate-500 dark:text-slate-400">Desde</p>
-                      <p className="text-xl font-bold text-blue-600 dark:text-blue-400">${product.price.toFixed(2)}</p>
+                      <span className="text-xs text-slate-500 dark:text-slate-400 block mb-1">Desde</span>
+                      <span className="text-2xl font-bold text-[#00E5FF] dark:text-[#00E5FF]">
+                        ${product.price.toFixed(2)}
+                      </span>
                     </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <button 
+                      onClick={() => onNavigate('quote')}
+                      className="flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl text-sm font-bold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors"
+                    >
+                      <MessageCircle size={16} />
+                      Cotizar
+                    </button>
                     <button 
                       onClick={() => onNavigate('editor', product)}
-                      className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded-lg transition-colors flex items-center gap-2"
+                      className="flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl text-sm font-bold bg-[#00E5FF] text-slate-900 hover:bg-[#00E5FF]/90 hover:shadow-lg hover:shadow-[#00E5FF]/20 transition-all"
                     >
-                      <Palette size={16} /> Personalizar
+                      <PenTool size={16} />
+                      Diseñar
                     </button>
                   </div>
                 </div>
@@ -127,8 +143,10 @@ export default function Catalog({ onNavigate }: CatalogProps) {
           </div>
 
           {filteredProducts.length === 0 && (
-            <div className="text-center py-20 bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm">
-              <p className="text-slate-500 dark:text-slate-400 text-lg">No se encontraron productos que coincidan con tu búsqueda.</p>
+            <div className="text-center py-20 bg-white dark:bg-[#0D1B3E] rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm">
+              <Palette className="mx-auto h-12 w-12 text-slate-300 dark:text-slate-600 mb-4" />
+              <h3 className="text-lg font-bold text-slate-900 dark:text-white mb-2">No se encontraron productos</h3>
+              <p className="text-slate-500 dark:text-slate-400">Intenta con otros términos de búsqueda o selecciona otra categoría.</p>
             </div>
           )}
         </div>

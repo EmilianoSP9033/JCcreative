@@ -1,424 +1,674 @@
-import React, { useState } from 'react';
-import { motion, AnimatePresence } from 'motion/react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { 
-  Type, Image as ImageIcon, Square, LayoutTemplate, Palette, 
-  Undo, Redo, ZoomIn, ZoomOut, Trash2, ShoppingCart, Download
+  PenTool, Search, ChevronLeft, ChevronRight, Type, ImageIcon, 
+  Square, Droplet, Undo2, Redo2, Eye, Save, ShoppingCart, 
+  Bold, Italic, Palette, Trash2, Copy, ArrowUp, ArrowDown, 
+  Lock, Unlock, EyeOff, Minus, Plus, MousePointer2, LayoutTemplate
 } from 'lucide-react';
-import { DndContext, useDraggable, useSensor, useSensors, PointerSensor } from '@dnd-kit/core';
-import { restrictToParentElement } from '@dnd-kit/modifiers';
-import { Screen, Product, CanvasElement } from '../types';
+
+// --- Types & Constants ---
+type ElementType = 'text' | 'shape' | 'image' | 'splash';
+
+interface CanvasElement {
+  id: string;
+  type: ElementType;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  content?: string;
+  color?: string;
+  fontFamily?: string;
+  fontSize?: number;
+  bold?: boolean;
+  italic?: boolean;
+  rotation: number;
+  opacity: number;
+  locked: boolean;
+  visible: boolean;
+  zIndex: number;
+  shapeType?: 'rect' | 'circle' | 'triangle';
+}
+
+const BRAND_COLORS = ['#00E5FF', '#0A3D8F', '#FFD700', '#6A1B9A', '#070B18', '#FFFFFF', '#E2E8F0', '#1A1A2E'];
+const FONTS = ['Inter', 'Space Grotesk', 'Playfair Display', 'JetBrains Mono', 'Georgia', 'Arial'];
+
+const uid = () => Math.random().toString(36).substring(2, 9);
+
+// --- Ink Splash SVG Component ---
+const InkSplash = ({ color = "#00E5FF", className = "" }: { color?: string, className?: string }) => (
+  <svg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg" className={className} style={{ fill: color }}>
+    <path d="M45.7,-76.1C58.9,-69.3,69.2,-55.4,76.5,-40.8C83.8,-26.2,88.1,-10.9,86.2,3.8C84.3,18.5,76.2,32.6,66.1,44.2C56,55.8,43.9,64.9,30.4,71.1C16.9,77.3,2,80.6,-12.1,79.5C-26.2,78.4,-39.5,72.9,-51.1,64.2C-62.7,55.5,-72.6,43.6,-78.9,29.8C-85.2,16,-87.9,0.3,-84.8,-14.2C-81.7,-28.7,-72.8,-42,-61.2,-51.6C-49.6,-61.2,-35.3,-67.1,-21.3,-71.4C-7.3,-75.7,6.4,-78.4,20.8,-79.1C35.2,-79.8,50.3,-78.5,45.7,-76.1Z" transform="translate(100 100)" />
+  </svg>
+);
+
+import { Screen, Product } from '../types';
 
 interface EditorProps {
-  onNavigate: (screen: Screen, product?: Product) => void;
+  onNavigate?: (screen: Screen, product?: Product) => void;
   product?: Product | null;
 }
 
-interface DraggableItemProps {
-  element: CanvasElement;
-  isSelected: boolean;
-  onSelect: (id: string) => void;
-}
-
-const DraggableItem: React.FC<DraggableItemProps> = ({ element, isSelected, onSelect }) => {
-  const { attributes, listeners, setNodeRef, transform } = useDraggable({
-    id: element.id,
-  });
-
-  const style: React.CSSProperties = {
-    position: 'absolute',
-    left: element.x,
-    top: element.y,
-    transform: transform ? `translate3d(${transform.x}px, ${transform.y}px, 0)` : undefined,
-    color: element.color,
-    fontSize: element.fontSize ? `${element.fontSize}px` : undefined,
-    width: element.width,
-    height: element.height,
-    border: isSelected ? '2px dashed #3b82f6' : 'none',
-    cursor: 'move',
-    padding: '4px',
-    backgroundColor: element.type === 'shape' ? element.color : 'transparent',
-    zIndex: isSelected ? 10 : (element.zIndex || 1),
-    borderRadius: element.type === 'shape' && element.width === element.height && element.content === 'circle' ? '50%' : undefined,
-  };
-
-  return (
-    <div 
-      ref={setNodeRef} 
-      style={style} 
-      {...listeners} 
-      {...attributes}
-      onClick={(e) => { e.stopPropagation(); onSelect(element.id); }}
-    >
-      {element.type === 'text' && element.content}
-      {element.type === 'image' && <img src={element.content} alt="canvas item" className="w-full h-full object-contain pointer-events-none" />}
-    </div>
-  );
-}
-
 export default function Editor({ onNavigate, product }: EditorProps) {
+  // --- State ---
   const [elements, setElements] = useState<CanvasElement[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [history, setHistory] = useState<CanvasElement[][]>([[]]);
+  const [historyIndex, setHistoryIndex] = useState(0);
+  
   const [zoom, setZoom] = useState(1);
-  const [activeTab, setActiveTab] = useState('text');
-  
-  // Product options
-  const [size, setSize] = useState('M');
-  const [quantity, setQuantity] = useState(1);
-  
-  const sensors = useSensors(
-    useSensor(PointerSensor, {
-      activationConstraint: {
-        distance: 5,
-      },
-    })
-  );
+  const [leftSidebarOpen, setLeftSidebarOpen] = useState(true);
+  const [activeLeftTab, setActiveLeftTab] = useState<'elementos' | 'texto' | 'imagenes' | 'fondos'>('elementos');
+  const [designName, setDesignName] = useState("Mi diseño");
+  const [canvasBg, setCanvasBg] = useState("#FFFFFF");
 
-  const handleDragEnd = (event: any) => {
-    const { active, delta } = event;
-    setElements(els => els.map(el => {
-      if (el.id === active.id) {
-        return { ...el, x: el.x + delta.x, y: el.y + delta.y };
-      }
-      return el;
-    }));
-  };
+  const canvasRef = useRef<HTMLDivElement>(null);
+  const dragRef = useRef<{ id: string, type: string, startX: number, startY: number, initW: number, initH: number, initX: number, initY: number } | null>(null);
 
-  const addElement = (type: 'text' | 'image' | 'shape', content: string) => {
+  // --- History Management ---
+  const saveHistory = useCallback((newElements: CanvasElement[]) => {
+    const newHistory = history.slice(0, historyIndex + 1);
+    newHistory.push(newElements);
+    setHistory(newHistory);
+    setHistoryIndex(newHistory.length - 1);
+  }, [history, historyIndex]);
+
+  const undo = () => { if (historyIndex > 0) { setHistoryIndex(historyIndex - 1); setElements(history[historyIndex - 1]); } };
+  const redo = () => { if (historyIndex < history.length - 1) { setHistoryIndex(historyIndex + 1); setElements(history[historyIndex + 1]); } };
+
+  // --- Element Actions ---
+  const addElement = (el: Partial<CanvasElement>) => {
     const newEl: CanvasElement = {
-      id: `el-${Date.now()}`,
-      type,
-      content,
-      x: 100,
-      y: 100,
-      color: type === 'shape' ? '#3b82f6' : '#ffffff',
-      fontSize: type === 'text' ? 24 : undefined,
-      width: type === 'shape' ? 100 : (type === 'image' ? 150 : undefined),
-      height: type === 'shape' ? 100 : (type === 'image' ? 150 : undefined),
+      id: uid(),
+      type: 'shape',
+      x: 50, y: 50,
+      width: 100, height: 100,
+      rotation: 0, opacity: 100,
+      locked: false, visible: true,
+      zIndex: elements.length + 1,
+      ...el
     };
-    setElements([...elements, newEl]);
+    const next = [...elements, newEl];
+    setElements(next);
+    saveHistory(next);
     setSelectedId(newEl.id);
   };
 
-  const deleteSelected = () => {
-    if (selectedId) {
-      setElements(els => els.filter(el => el.id !== selectedId));
-      setSelectedId(null);
+  const updateElement = (id: string, updates: Partial<CanvasElement>) => {
+    const next = elements.map(e => e.id === id ? { ...e, ...updates } : e);
+    setElements(next);
+    saveHistory(next);
+  };
+
+  const deleteElement = (id: string) => {
+    const next = elements.filter(e => e.id !== id);
+    setElements(next);
+    saveHistory(next);
+    if (selectedId === id) setSelectedId(null);
+  };
+
+  const duplicateElement = (id: string) => {
+    const el = elements.find(e => e.id === id);
+    if (el) addElement({ ...el, x: el.x + 20, y: el.y + 20 });
+  };
+
+  const moveLayer = (id: string, direction: 'up' | 'down') => {
+    const index = elements.findIndex(e => e.id === id);
+    if (index < 0) return;
+    if (direction === 'up' && index < elements.length - 1) {
+      const next = [...elements];
+      [next[index], next[index + 1]] = [next[index + 1], next[index]];
+      setElements(next);
+      saveHistory(next);
+    } else if (direction === 'down' && index > 0) {
+      const next = [...elements];
+      [next[index], next[index - 1]] = [next[index - 1], next[index]];
+      setElements(next);
+      saveHistory(next);
     }
   };
 
-  const updateSelected = (updates: Partial<CanvasElement>) => {
-    if (selectedId) {
-      setElements(els => els.map(el => el.id === selectedId ? { ...el, ...updates } : el));
+  // --- Drag & Resize ---
+  const handleMouseMove = useCallback((e: MouseEvent) => {
+    if (!dragRef.current || !canvasRef.current) return;
+    const { id, type, startX, startY, initW, initH, initX, initY } = dragRef.current;
+    
+    // Adjust for zoom
+    const dx = (e.clientX - startX) / zoom;
+    const dy = (e.clientY - startY) / zoom;
+
+    setElements(prev => prev.map(el => {
+      if (el.id !== id) return el;
+      if (type === "move") {
+        return { ...el, x: initX + dx, y: initY + dy };
+      } else if (type.startsWith("resize")) {
+        let newW = initW;
+        let newH = initH;
+        let newX = initX;
+        let newY = initY;
+
+        if (type.includes("e")) newW = Math.max(20, initW + dx);
+        if (type.includes("s")) newH = Math.max(20, initH + dy);
+        if (type.includes("w")) { newW = Math.max(20, initW - dx); newX = initX + (initW - newW); }
+        if (type.includes("n")) { newH = Math.max(20, initH - dy); newY = initY + (initH - newH); }
+
+        return { ...el, width: newW, height: newH, x: newX, y: newY };
+      }
+      return el;
+    }));
+  }, [zoom]);
+
+  const handleMouseUp = useCallback(() => {
+    if (dragRef.current) {
+      saveHistory(elements);
+      dragRef.current = null;
     }
-  };
+  }, [elements, saveHistory]);
 
-  const selectedElement = elements.find(el => el.id === selectedId);
-  const basePrice = product?.price || 0;
-  const totalPrice = basePrice * quantity;
+  useEffect(() => {
+    window.addEventListener("mousemove", handleMouseMove);
+    window.addEventListener("mouseup", handleMouseUp);
+    return () => {
+      window.removeEventListener("mousemove", handleMouseMove);
+      window.removeEventListener("mouseup", handleMouseUp);
+    };
+  }, [handleMouseMove, handleMouseUp]);
 
-  // Tools Sidebar Items
-  const tools = [
-    { id: 'text', icon: <Type size={20} />, label: 'Texto' },
-    { id: 'image', icon: <ImageIcon size={20} />, label: 'Imágenes' },
-    { id: 'shape', icon: <Square size={20} />, label: 'Formas' },
-    { id: 'template', icon: <LayoutTemplate size={20} />, label: 'Plantillas' },
-    { id: 'bg', icon: <Palette size={20} />, label: 'Fondos' },
-  ];
+  // --- Keyboard Shortcuts ---
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Ignore if typing in an input
+      if (document.activeElement?.tagName === 'INPUT' || document.activeElement?.tagName === 'TEXTAREA') return;
+
+      if (e.ctrlKey || e.metaKey) {
+        if (e.key === "z") { e.preventDefault(); undo(); }
+        if (e.key === "y" || (e.shiftKey && e.key === "z")) { e.preventDefault(); redo(); }
+        if (e.key === "d" && selectedId) { e.preventDefault(); duplicateElement(selectedId); }
+      }
+      if ((e.key === "Delete" || e.key === "Backspace") && selectedId) {
+        e.preventDefault();
+        deleteElement(selectedId);
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [historyIndex, selectedId, elements]);
+
+  const selectedEl = elements.find(e => e.id === selectedId);
 
   return (
-    <div className="h-[calc(100vh-64px)] flex overflow-hidden bg-slate-50 dark:bg-slate-900 transition-colors duration-300">
-      {/* Sidebar */}
-      <motion.div 
-        initial={{ x: -300 }}
-        animate={{ x: 0 }}
-        className="w-20 md:w-72 bg-white dark:bg-slate-800 border-r border-slate-200 dark:border-slate-700 flex flex-col shrink-0 transition-colors duration-300 z-20 shadow-lg"
-      >
-        <div className="flex flex-1">
-          {/* Tool Icons */}
-          <div className="w-20 border-r border-slate-200 dark:border-slate-700 flex flex-col items-center py-4 gap-4">
-            {tools.map((t, i) => (
-              <motion.button 
-                key={t.id}
-                initial={{ opacity: 0, x: -20 }}
-                animate={{ opacity: 1, x: 0 }}
-                transition={{ delay: i * 0.05 }}
-                whileHover={{ scale: 1.1 }}
-                whileTap={{ scale: 0.9 }}
-                onClick={() => setActiveTab(t.id)}
-                className={`flex flex-col items-center justify-center w-16 h-16 rounded-xl transition-colors ${activeTab === t.id ? 'bg-blue-600 text-white shadow-md shadow-blue-500/30' : 'text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700 hover:text-slate-900 dark:hover:text-white'}`}
-              >
-                {t.icon}
-                <span className="text-[10px] mt-1 font-medium">{t.label}</span>
-              </motion.button>
-            ))}
-          </div>
-          
-          {/* Tool Content (Hidden on mobile) */}
-          <div className="hidden md:block flex-1 p-4 overflow-y-auto">
-            <AnimatePresence mode="wait">
-              <motion.div
-                key={activeTab}
-                initial={{ opacity: 0, x: -10 }}
-                animate={{ opacity: 1, x: 0 }}
-                exit={{ opacity: 0, x: 10 }}
-                transition={{ duration: 0.2 }}
-              >
-                <h3 className="text-lg font-bold mb-4 text-slate-900 dark:text-white">
-                  {tools.find(t => t.id === activeTab)?.label}
-                </h3>
-                
-                {activeTab === 'text' && (
-                  <div className="space-y-3">
-                    <motion.button whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }} onClick={() => addElement('text', 'Añadir Título')} className="w-full p-3 bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 rounded-lg text-2xl font-bold text-left text-slate-900 dark:text-white transition-colors">Añadir Título</motion.button>
-                    <motion.button whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }} onClick={() => addElement('text', 'Añadir Subtítulo')} className="w-full p-3 bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 rounded-lg text-lg font-semibold text-left text-slate-900 dark:text-white transition-colors">Añadir Subtítulo</motion.button>
-                    <motion.button whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }} onClick={() => addElement('text', 'Añadir texto de párrafo')} className="w-full p-3 bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 rounded-lg text-sm text-left text-slate-900 dark:text-white transition-colors">Añadir texto de párrafo</motion.button>
-                  </div>
-                )}
-                
-                {activeTab === 'image' && (
-                  <div className="space-y-4">
-                    <motion.button whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }} className="w-full py-3 bg-blue-600 hover:bg-blue-500 text-white rounded-lg font-bold transition-colors shadow-md">Subir Imagen</motion.button>
-                    <div className="grid grid-cols-2 gap-2">
-                      <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }} onClick={() => addElement('image', 'https://images.unsplash.com/photo-1557672172-298e090bd0f1?auto=format&fit=crop&w=150&q=80')} className="aspect-square bg-slate-100 dark:bg-slate-700 rounded-lg cursor-pointer hover:ring-2 ring-blue-500 overflow-hidden"><img src="https://images.unsplash.com/photo-1557672172-298e090bd0f1?auto=format&fit=crop&w=150&q=80" className="w-full h-full object-cover" /></motion.div>
-                      <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }} onClick={() => addElement('image', 'https://images.unsplash.com/photo-1557683316-973673baf926?auto=format&fit=crop&w=150&q=80')} className="aspect-square bg-slate-100 dark:bg-slate-700 rounded-lg cursor-pointer hover:ring-2 ring-blue-500 overflow-hidden"><img src="https://images.unsplash.com/photo-1557683316-973673baf926?auto=format&fit=crop&w=150&q=80" className="w-full h-full object-cover" /></motion.div>
-                    </div>
-                  </div>
-                )}
-
-                {activeTab === 'shape' && (
-                  <div className="grid grid-cols-2 gap-2">
-                    <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }} onClick={() => addElement('shape', 'square')} className="aspect-square bg-slate-100 dark:bg-slate-700 rounded-lg cursor-pointer hover:ring-2 ring-blue-500 flex items-center justify-center transition-all"><div className="w-12 h-12 bg-slate-900 dark:bg-white"></div></motion.div>
-                    <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }} onClick={() => addElement('shape', 'circle')} className="aspect-square bg-slate-100 dark:bg-slate-700 rounded-lg cursor-pointer hover:ring-2 ring-blue-500 flex items-center justify-center transition-all"><div className="w-12 h-12 bg-slate-900 dark:bg-white rounded-full"></div></motion.div>
-                  </div>
-                )}
-              </motion.div>
-            </AnimatePresence>
-          </div>
-        </div>
-      </motion.div>
-
-      {/* Center Column: Canvas */}
-      <div className="flex-1 flex flex-col bg-slate-100 dark:bg-slate-950 relative overflow-hidden transition-colors duration-300" onClick={() => setSelectedId(null)}>
-        {/* Top Toolbar */}
-        <motion.div 
-          initial={{ y: -50, opacity: 0 }}
-          animate={{ y: 0, opacity: 1 }}
-          className="h-12 bg-white dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700 flex items-center justify-between px-4 shrink-0 transition-colors duration-300 z-10 shadow-sm"
-        >
-          <div className="flex items-center gap-2">
-            <button className="p-1.5 text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-700 rounded transition-colors"><Undo size={18} /></button>
-            <button className="p-1.5 text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-700 rounded transition-colors"><Redo size={18} /></button>
-          </div>
-          <div className="flex items-center gap-2">
-            <button onClick={() => setZoom(z => Math.max(0.5, z - 0.1))} className="p-1.5 text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-700 rounded transition-colors"><ZoomOut size={18} /></button>
-            <span className="text-sm font-medium w-12 text-center text-slate-900 dark:text-white">{Math.round(zoom * 100)}%</span>
-            <button onClick={() => setZoom(z => Math.min(2, z + 0.1))} className="p-1.5 text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-700 rounded transition-colors"><ZoomIn size={18} /></button>
-          </div>
-          <div className="flex items-center gap-2">
-            <button onClick={() => setElements([])} className="px-3 py-1.5 text-sm font-medium text-slate-500 dark:text-slate-400 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded transition-colors">Limpiar</button>
-            <button onClick={deleteSelected} disabled={!selectedId} className={`p-1.5 rounded transition-colors ${selectedId ? 'text-red-500 dark:text-red-400 hover:bg-slate-100 dark:hover:bg-slate-700' : 'text-slate-300 dark:text-slate-600'}`}><Trash2 size={18} /></button>
-            <button className="px-4 py-1.5 bg-blue-600 hover:bg-blue-500 text-white text-sm font-bold rounded-lg transition-colors shadow-sm ml-2 flex items-center gap-2">
-              <Download size={16} /> Guardar
-            </button>
-          </div>
-        </motion.div>
-
-        {/* Canvas Area */}
-        <div className="flex-1 overflow-auto flex items-center justify-center p-8 relative">
-          {/* Grid Background */}
-          <div className="absolute inset-0 pointer-events-none opacity-20 dark:opacity-10" style={{ backgroundImage: 'radial-gradient(#3b82f6 1px, transparent 1px)', backgroundSize: '20px 20px' }}></div>
-          
-          <motion.div 
-            initial={{ scale: 0.9, opacity: 0 }}
-            animate={{ scale: zoom, opacity: 1 }}
-            transition={{ type: 'spring', stiffness: 200, damping: 20 }}
-            className="relative bg-white dark:bg-slate-800 shadow-2xl transition-transform"
-            style={{ 
-              width: 500, 
-              height: 600, 
-              transformOrigin: 'center center'
-            }}
+    <div className="flex flex-col h-screen bg-[#1A1A2E] text-white font-sans overflow-hidden">
+      
+      {/* ─── TOP TOOLBAR ─── */}
+      <header className="h-14 bg-[#070B18] border-b border-[#00E5FF]/20 flex items-center justify-between px-4 shrink-0 z-30">
+        <div className="flex items-center gap-4 w-1/3">
+          <div 
+            className="flex items-center gap-2 text-[#00E5FF] cursor-pointer hover:opacity-80 transition-opacity"
+            onClick={() => onNavigate?.('home')}
           >
-            {/* Product Mockup Background */}
-            {product && (
-              <img 
-                src={product.image} 
-                alt="Mockup" 
-                className="absolute inset-0 w-full h-full object-cover opacity-50 pointer-events-none"
-                referrerPolicy="no-referrer"
-              />
-            )}
-            
-            {/* Print Area Guide */}
-            <div className="absolute top-1/4 left-1/4 right-1/4 bottom-1/4 border-2 border-dashed border-blue-500/30 pointer-events-none flex items-center justify-center">
-              <span className="text-blue-500/30 font-bold uppercase tracking-widest text-sm">Área de Impresión</span>
+            <PenTool size={20} />
+            <span className="font-bold tracking-tight hidden sm:inline">JC Creative</span>
+          </div>
+          <div className="h-6 w-px bg-white/10"></div>
+          <input 
+            type="text" 
+            value={designName}
+            onChange={(e) => setDesignName(e.target.value)}
+            className="bg-transparent border border-transparent hover:border-white/10 focus:border-[#00E5FF]/50 rounded px-2 py-1 text-sm font-medium outline-none transition-colors w-48"
+          />
+        </div>
+
+        <div className="flex items-center justify-center gap-2 w-1/3">
+          <button onClick={undo} disabled={historyIndex === 0} className="p-2 text-gray-400 hover:text-white hover:bg-white/5 rounded disabled:opacity-30 transition-colors"><Undo2 size={18}/></button>
+          <button onClick={redo} disabled={historyIndex === history.length - 1} className="p-2 text-gray-400 hover:text-white hover:bg-white/5 rounded disabled:opacity-30 transition-colors"><Redo2 size={18}/></button>
+        </div>
+
+        <div className="flex items-center justify-end gap-3 w-1/3">
+          <button className="flex items-center gap-2 px-3 py-1.5 text-sm font-medium text-gray-300 hover:text-white hover:bg-white/5 rounded transition-colors">
+            <Eye size={16} /> Vista previa
+          </button>
+          <button className="flex items-center gap-2 px-3 py-1.5 text-sm font-medium text-gray-300 hover:text-white hover:bg-white/5 rounded transition-colors">
+            <Save size={16} /> Guardar
+          </button>
+          <button className="flex items-center gap-2 px-5 py-1.5 text-sm font-bold text-white bg-gradient-to-r from-[#00E5FF] to-[#6A1B9A] rounded-full shadow-[0_0_15px_rgba(0,229,255,0.4)] hover:shadow-[0_0_25px_rgba(0,229,255,0.6)] transition-all hover:scale-105">
+            <ShoppingCart size={16} /> Pedir ahora
+          </button>
+        </div>
+      </header>
+
+      <div className="flex flex-1 overflow-hidden relative">
+        
+        {/* ─── LEFT SIDEBAR ─── */}
+        <aside 
+          className={`bg-[#0D1B3E] border-r border-[#00E5FF]/20 flex flex-col transition-all duration-300 z-20 shrink-0 ${leftSidebarOpen ? 'w-[280px]' : 'w-0 overflow-hidden'}`}
+        >
+          <div className="w-[280px] h-full flex flex-col">
+            {/* Search */}
+            <div className="p-4 border-b border-white/5">
+              <div className="relative group">
+                <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 group-focus-within:text-[#00E5FF] transition-colors" />
+                <input 
+                  type="text" 
+                  placeholder="Buscar recursos..." 
+                  className="w-full bg-[#070B18] border border-white/10 rounded-lg pl-9 pr-4 py-2 text-sm outline-none focus:border-[#00E5FF] focus:shadow-[0_0_10px_rgba(0,229,255,0.2)] transition-all"
+                />
+              </div>
             </div>
 
-            {/* Draggable Elements */}
-            <DndContext sensors={sensors} onDragEnd={handleDragEnd} modifiers={[restrictToParentElement]}>
-              {elements.map(el => (
-                <DraggableItem 
-                  key={el.id} 
-                  element={el} 
-                  isSelected={selectedId === el.id} 
-                  onSelect={(id) => setSelectedId(id)} 
-                />
+            {/* Tabs */}
+            <div className="flex border-b border-white/5">
+              {[
+                { id: 'elementos', icon: <Square size={16}/>, label: 'Elementos' },
+                { id: 'texto', icon: <Type size={16}/>, label: 'Texto' },
+                { id: 'imagenes', icon: <ImageIcon size={16}/>, label: 'Imágenes' },
+                { id: 'fondos', icon: <Droplet size={16}/>, label: 'Fondos' },
+              ].map(tab => (
+                <button
+                  key={tab.id}
+                  onClick={() => setActiveLeftTab(tab.id as any)}
+                  className={`flex-1 py-3 flex flex-col items-center gap-1 text-[10px] font-medium uppercase tracking-wider transition-colors ${activeLeftTab === tab.id ? 'text-[#00E5FF] border-b-2 border-[#00E5FF] bg-[#00E5FF]/5' : 'text-gray-500 hover:text-gray-300 hover:bg-white/5'}`}
+                >
+                  {tab.icon}
+                  {tab.label}
+                </button>
               ))}
-            </DndContext>
-          </motion.div>
-        </div>
-      </div>
+            </div>
 
-      {/* Right Column: Properties & Order */}
-      <motion.div 
-        initial={{ x: 300 }}
-        animate={{ x: 0 }}
-        className="w-72 bg-white dark:bg-slate-800 border-l border-slate-200 dark:border-slate-700 flex flex-col shrink-0 overflow-y-auto transition-colors duration-300 z-20 shadow-lg"
-      >
-        {/* Element Properties */}
-        <div className="p-4 border-b border-slate-200 dark:border-slate-700">
-          <h3 className="font-bold text-slate-900 dark:text-white mb-4">Propiedades</h3>
-          {selectedElement ? (
-            <div className="space-y-4">
-              {selectedElement.type === 'text' && (
-                <>
+            {/* Tab Content */}
+            <div className="flex-1 overflow-y-auto p-4 custom-scrollbar">
+              {activeLeftTab === 'elementos' && (
+                <div className="space-y-6">
                   <div>
-                    <label className="block text-xs text-slate-500 dark:text-slate-400 mb-1">Texto</label>
-                    <input 
-                      type="text" 
-                      value={selectedElement.content} 
-                      onChange={(e) => updateSelected({ content: e.target.value })}
-                      className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded px-2 py-1 text-sm text-slate-900 dark:text-white focus:outline-none focus:border-blue-500 transition-colors"
-                    />
+                    <h3 className="text-xs font-semibold text-gray-400 mb-3 uppercase">Formas Básicas</h3>
+                    <div className="grid grid-cols-3 gap-2">
+                      <button onClick={() => addElement({ type: 'shape', shapeType: 'rect', color: '#0A3D8F' })} className="aspect-square bg-[#070B18] border border-white/10 rounded-lg flex items-center justify-center hover:border-[#00E5FF] hover:bg-[#00E5FF]/10 transition-colors">
+                        <div className="w-8 h-8 bg-gray-300 rounded-sm"></div>
+                      </button>
+                      <button onClick={() => addElement({ type: 'shape', shapeType: 'circle', color: '#FFD700' })} className="aspect-square bg-[#070B18] border border-white/10 rounded-lg flex items-center justify-center hover:border-[#00E5FF] hover:bg-[#00E5FF]/10 transition-colors">
+                        <div className="w-8 h-8 bg-gray-300 rounded-full"></div>
+                      </button>
+                      <button onClick={() => addElement({ type: 'shape', shapeType: 'triangle', color: '#6A1B9A' })} className="aspect-square bg-[#070B18] border border-white/10 rounded-lg flex items-center justify-center hover:border-[#00E5FF] hover:bg-[#00E5FF]/10 transition-colors">
+                        <div className="w-0 h-0 border-l-[16px] border-l-transparent border-r-[16px] border-r-transparent border-b-[28px] border-b-gray-300"></div>
+                      </button>
+                    </div>
                   </div>
                   <div>
-                    <label className="block text-xs text-slate-500 dark:text-slate-400 mb-1">Tamaño de fuente</label>
-                    <input 
-                      type="number" 
-                      value={selectedElement.fontSize} 
-                      onChange={(e) => updateSelected({ fontSize: Number(e.target.value) })}
-                      className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded px-2 py-1 text-sm text-slate-900 dark:text-white focus:outline-none focus:border-blue-500 transition-colors"
-                    />
+                    <h3 className="text-xs font-semibold text-gray-400 mb-3 uppercase">Manchas de Tinta (Brand)</h3>
+                    <div className="grid grid-cols-2 gap-2">
+                      <button onClick={() => addElement({ type: 'splash', color: '#00E5FF', width: 150, height: 150 })} className="aspect-square bg-[#070B18] border border-white/10 rounded-lg flex items-center justify-center hover:border-[#00E5FF] hover:bg-[#00E5FF]/10 transition-colors p-2">
+                        <InkSplash color="#00E5FF" className="w-full h-full opacity-100" />
+                      </button>
+                      <button onClick={() => addElement({ type: 'splash', color: '#FFD700', width: 150, height: 150 })} className="aspect-square bg-[#070B18] border border-white/10 rounded-lg flex items-center justify-center hover:border-[#00E5FF] hover:bg-[#00E5FF]/10 transition-colors p-2">
+                        <InkSplash color="#FFD700" className="w-full h-full opacity-100" />
+                      </button>
+                    </div>
                   </div>
-                </>
+                </div>
               )}
-              {(selectedElement.type === 'text' || selectedElement.type === 'shape') && (
-                <div>
-                  <label className="block text-xs text-slate-500 dark:text-slate-400 mb-1">Color</label>
-                  <div className="flex gap-2">
-                    {['#ffffff', '#000000', '#ef4444', '#3b82f6', '#22c55e', '#eab308'].map(c => (
+
+              {activeLeftTab === 'texto' && (
+                <div className="space-y-3">
+                  <button onClick={() => addElement({ type: 'text', content: 'Añadir un título', fontSize: 48, bold: true, color: '#FFFFFF' })} className="w-full py-4 bg-[#070B18] border border-white/10 rounded-lg hover:border-[#00E5FF] hover:bg-[#00E5FF]/5 transition-colors text-2xl font-bold">
+                    Añadir un título
+                  </button>
+                  <button onClick={() => addElement({ type: 'text', content: 'Añadir un subtítulo', fontSize: 24, bold: true, color: '#E2E8F0' })} className="w-full py-3 bg-[#070B18] border border-white/10 rounded-lg hover:border-[#00E5FF] hover:bg-[#00E5FF]/5 transition-colors text-lg font-semibold">
+                    Añadir un subtítulo
+                  </button>
+                  <button onClick={() => addElement({ type: 'text', content: 'Añadir texto de cuerpo', fontSize: 16, color: '#94A3B8' })} className="w-full py-2 bg-[#070B18] border border-white/10 rounded-lg hover:border-[#00E5FF] hover:bg-[#00E5FF]/5 transition-colors text-sm">
+                    Añadir texto de cuerpo
+                  </button>
+                </div>
+              )}
+
+              {activeLeftTab === 'fondos' && (
+                <div className="space-y-4">
+                  <h3 className="text-xs font-semibold text-gray-400 mb-2 uppercase">Colores de Marca</h3>
+                  <div className="grid grid-cols-4 gap-2">
+                    {BRAND_COLORS.map(c => (
                       <button 
                         key={c} 
-                        onClick={() => updateSelected({ color: c })}
-                        className={`w-6 h-6 rounded-full border-2 ${selectedElement.color === c ? 'border-blue-500' : 'border-transparent shadow-sm'}`}
+                        onClick={() => setCanvasBg(c)}
+                        className="aspect-square rounded-md border border-white/20 hover:scale-110 transition-transform shadow-sm"
                         style={{ backgroundColor: c }}
                       />
                     ))}
                   </div>
                 </div>
               )}
-              {selectedElement.type !== 'text' && (
-                <div className="flex gap-2">
-                  <div className="flex-1">
-                    <label className="block text-xs text-slate-500 dark:text-slate-400 mb-1">Ancho</label>
-                    <input type="number" value={selectedElement.width} onChange={(e) => updateSelected({ width: Number(e.target.value) })} className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded px-2 py-1 text-sm text-slate-900 dark:text-white transition-colors" />
-                  </div>
-                  <div className="flex-1">
-                    <label className="block text-xs text-slate-500 dark:text-slate-400 mb-1">Alto</label>
-                    <input type="number" value={selectedElement.height} onChange={(e) => updateSelected({ height: Number(e.target.value) })} className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded px-2 py-1 text-sm text-slate-900 dark:text-white transition-colors" />
-                  </div>
-                </div>
-              )}
-              
-              <div>
-                <label className="block text-xs text-slate-500 dark:text-slate-400 mb-1">Capas (Z-Index)</label>
-                <div className="flex gap-2">
-                  <button 
-                    onClick={() => updateSelected({ zIndex: (selectedElement.zIndex || 1) - 1 })}
-                    className="flex-1 py-1 bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 rounded text-sm text-slate-900 dark:text-white transition-colors"
-                  >
-                    Atrás
-                  </button>
-                  <button 
-                    onClick={() => updateSelected({ zIndex: (selectedElement.zIndex || 1) + 1 })}
-                    className="flex-1 py-1 bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 rounded text-sm text-slate-900 dark:text-white transition-colors"
-                  >
-                    Adelante
-                  </button>
-                </div>
-              </div>
             </div>
-          ) : (
-            <p className="text-sm text-slate-500 dark:text-slate-400">Selecciona un elemento en el lienzo para editar sus propiedades.</p>
-          )}
-        </div>
+          </div>
+        </aside>
 
-        {/* Product Details */}
-        <div className="p-4 flex-1 flex flex-col">
-          <h3 className="font-bold text-slate-900 dark:text-white mb-4">Detalles del Pedido</h3>
-          <div className="space-y-4 flex-1">
-            <div>
-              <label className="block text-xs text-slate-500 dark:text-slate-400 mb-1">Producto</label>
-              <div className="text-sm font-medium text-slate-900 dark:text-white">{product?.name || 'Producto Personalizado'}</div>
+        {/* Toggle Left Sidebar Button */}
+        <button 
+          onClick={() => setLeftSidebarOpen(!leftSidebarOpen)}
+          className="absolute left-0 top-1/2 -translate-y-1/2 z-30 bg-[#0D1B3E] border border-[#00E5FF]/20 border-l-0 rounded-r-lg p-1 text-gray-400 hover:text-[#00E5FF] shadow-lg"
+          style={{ transform: `translate(${leftSidebarOpen ? '280px' : '0'}, -50%)` }}
+        >
+          {leftSidebarOpen ? <ChevronLeft size={16} /> : <ChevronRight size={16} />}
+        </button>
+
+        {/* ─── CENTER CANVAS WORKSPACE ─── */}
+        <main 
+          className="flex-1 relative overflow-hidden flex items-center justify-center"
+          style={{
+            backgroundColor: '#1A1A2E',
+            backgroundImage: 'radial-gradient(circle, rgba(0, 229, 255, 0.1) 1px, transparent 1px)',
+            backgroundSize: '20px 20px'
+          }}
+          onClick={() => setSelectedId(null)}
+        >
+          {/* Rulers (Visual representation) */}
+          <div className="absolute top-0 left-0 right-0 h-6 bg-[#070B18] border-b border-white/10 flex items-end overflow-hidden z-10 opacity-80">
+            {Array.from({ length: 50 }).map((_, i) => (
+              <div key={i} className="flex-shrink-0 border-l border-white/20 h-2" style={{ width: '50px' }}>
+                <span className="text-[8px] text-gray-500 ml-1 block -mt-3">{i * 50}</span>
+              </div>
+            ))}
+          </div>
+          <div className="absolute top-0 left-0 bottom-0 w-6 bg-[#070B18] border-r border-white/10 flex flex-col items-end overflow-hidden z-10 opacity-80 pt-6">
+            {Array.from({ length: 30 }).map((_, i) => (
+              <div key={i} className="flex-shrink-0 border-t border-white/20 w-2" style={{ height: '50px' }}>
+                <span className="text-[8px] text-gray-500 block -ml-4 mt-1">{i * 50}</span>
+              </div>
+            ))}
+          </div>
+
+          {/* Product Label */}
+          <div className="absolute top-10 left-10 bg-[#070B18]/80 backdrop-blur border border-white/10 px-3 py-1.5 rounded-md flex items-center gap-2 z-10 shadow-lg">
+            <LayoutTemplate size={14} className="text-[#00E5FF]" />
+            <span className="text-xs font-medium text-gray-300">
+              {product ? `${product.name} ${product.sizes?.[0] || ''}` : 'Tarjeta de presentación 9x5cm'}
+            </span>
+          </div>
+
+          {/* Canvas Container */}
+          <div 
+            className="relative shadow-[0_0_50px_rgba(0,0,0,0.5)] transition-transform origin-center"
+            style={{ 
+              width: 900, 
+              height: 500, 
+              transform: `scale(${zoom})`,
+              backgroundColor: canvasBg 
+            }}
+          >
+            <div ref={canvasRef} className="absolute inset-0 overflow-hidden">
+              {elements.map(el => {
+                if (!el.visible) return null;
+                const isSelected = selectedId === el.id;
+                
+                return (
+                  <div
+                    key={el.id}
+                    className={`absolute ${isSelected ? 'ring-1 ring-[#00E5FF]' : ''}`}
+                    style={{
+                      left: el.x, top: el.y,
+                      width: el.width, height: el.height,
+                      transform: `rotate(${el.rotation}deg)`,
+                      opacity: el.opacity / 100,
+                      zIndex: el.zIndex,
+                      cursor: el.locked ? 'default' : 'move'
+                    }}
+                    onClick={(e) => { e.stopPropagation(); setSelectedId(el.id); }}
+                    onMouseDown={(e) => {
+                      if (el.locked) return;
+                      e.stopPropagation();
+                      setSelectedId(el.id);
+                      if (canvasRef.current) {
+                        dragRef.current = {
+                          id: el.id, type: 'move',
+                          startX: e.clientX, startY: e.clientY,
+                          initW: el.width, initH: el.height,
+                          initX: el.x, initY: el.y
+                        };
+                      }
+                    }}
+                  >
+                    {/* Render Content */}
+                    {el.type === 'shape' && (
+                      <div 
+                        className="w-full h-full"
+                        style={{
+                          backgroundColor: el.shapeType !== 'triangle' ? el.color : 'transparent',
+                          borderRadius: el.shapeType === 'circle' ? '50%' : 0,
+                          borderLeft: el.shapeType === 'triangle' ? `${el.width/2}px solid transparent` : undefined,
+                          borderRight: el.shapeType === 'triangle' ? `${el.width/2}px solid transparent` : undefined,
+                          borderBottom: el.shapeType === 'triangle' ? `${el.height}px solid ${el.color}` : undefined,
+                        }}
+                      />
+                    )}
+                    {el.type === 'splash' && (
+                      <InkSplash color={el.color} className="w-full h-full" />
+                    )}
+                    {el.type === 'text' && (
+                      <div 
+                        className="w-full h-full flex items-center justify-center whitespace-pre-wrap leading-tight"
+                        style={{
+                          color: el.color,
+                          fontFamily: el.fontFamily || 'Inter',
+                          fontSize: `${el.fontSize}px`,
+                          fontWeight: el.bold ? 'bold' : 'normal',
+                          fontStyle: el.italic ? 'italic' : 'normal',
+                        }}
+                      >
+                        {el.content}
+                      </div>
+                    )}
+
+                    {/* Selection Handles */}
+                    {isSelected && !el.locked && (
+                      <>
+                        <div className="absolute -top-1.5 -left-1.5 w-3 h-3 bg-[#00E5FF] border border-white rounded-full cursor-nwse-resize shadow-[0_0_5px_#00E5FF]" onMouseDown={(e) => { e.stopPropagation(); dragRef.current = { id: el.id, type: 'resize-nw', startX: e.clientX, startY: e.clientY, initW: el.width, initH: el.height, initX: el.x, initY: el.y }; }} />
+                        <div className="absolute -top-1.5 -right-1.5 w-3 h-3 bg-[#00E5FF] border border-white rounded-full cursor-nesw-resize shadow-[0_0_5px_#00E5FF]" onMouseDown={(e) => { e.stopPropagation(); dragRef.current = { id: el.id, type: 'resize-ne', startX: e.clientX, startY: e.clientY, initW: el.width, initH: el.height, initX: el.x, initY: el.y }; }} />
+                        <div className="absolute -bottom-1.5 -left-1.5 w-3 h-3 bg-[#00E5FF] border border-white rounded-full cursor-nesw-resize shadow-[0_0_5px_#00E5FF]" onMouseDown={(e) => { e.stopPropagation(); dragRef.current = { id: el.id, type: 'resize-sw', startX: e.clientX, startY: e.clientY, initW: el.width, initH: el.height, initX: el.x, initY: el.y }; }} />
+                        <div className="absolute -bottom-1.5 -right-1.5 w-3 h-3 bg-[#00E5FF] border border-white rounded-full cursor-nwse-resize shadow-[0_0_5px_#00E5FF]" onMouseDown={(e) => { e.stopPropagation(); dragRef.current = { id: el.id, type: 'resize-se', startX: e.clientX, startY: e.clientY, initW: el.width, initH: el.height, initX: el.x, initY: el.y }; }} />
+                      </>
+                    )}
+                  </div>
+                );
+              })}
             </div>
-            
-            {product?.type === 'apparel' && (
-              <div>
-                <label className="block text-xs text-slate-500 dark:text-slate-400 mb-1">Talla</label>
-                <div className="grid grid-cols-5 gap-1">
-                  {['S', 'M', 'L', 'XL', 'XXL'].map(s => (
-                    <button 
-                      key={s}
-                      onClick={() => setSize(s)}
-                      className={`py-1 text-xs font-bold rounded border transition-colors ${size === s ? 'bg-blue-600 border-blue-600 text-white' : 'bg-slate-50 dark:bg-slate-900 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:border-slate-400 dark:hover:border-slate-500'}`}
-                    >
-                      {s}
-                    </button>
+          </div>
+
+          {/* Floating Context Toolbar */}
+          {selectedEl && !selectedEl.locked && (
+            <div 
+              className="absolute z-40 bg-[#0D1B3E]/90 backdrop-blur-md border border-[#00E5FF]/30 rounded-lg shadow-[0_8px_30px_rgba(0,0,0,0.5)] flex items-center p-1 gap-1 transition-all"
+              style={{
+                top: `max(60px, calc(50% + ${(selectedEl.y - 250) * zoom}px - 60px))`,
+                left: `calc(50% + ${(selectedEl.x - 450) * zoom}px)`
+              }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              {selectedEl.type === 'text' && (
+                <>
+                  <button onClick={() => updateElement(selectedEl.id, { bold: !selectedEl.bold })} className={`p-1.5 rounded hover:bg-white/10 ${selectedEl.bold ? 'text-[#00E5FF] bg-[#00E5FF]/10' : 'text-gray-300'}`}><Bold size={16}/></button>
+                  <button onClick={() => updateElement(selectedEl.id, { italic: !selectedEl.italic })} className={`p-1.5 rounded hover:bg-white/10 ${selectedEl.italic ? 'text-[#00E5FF] bg-[#00E5FF]/10' : 'text-gray-300'}`}><Italic size={16}/></button>
+                  <div className="w-px h-4 bg-white/20 mx-1"></div>
+                </>
+              )}
+              <div className="relative group">
+                <button className="p-1.5 rounded hover:bg-white/10 text-gray-300 flex items-center gap-1">
+                  <div className="w-4 h-4 rounded-full border border-white/50" style={{ backgroundColor: selectedEl.color || '#fff' }}></div>
+                </button>
+                <div className="absolute top-full left-0 mt-2 bg-[#070B18] border border-white/10 rounded-lg p-2 hidden group-hover:grid grid-cols-4 gap-1 shadow-xl">
+                  {BRAND_COLORS.map(c => (
+                    <button key={c} onClick={() => updateElement(selectedEl.id, { color: c })} className="w-6 h-6 rounded-full border border-white/20 hover:scale-110 transition-transform" style={{ backgroundColor: c }} />
                   ))}
                 </div>
               </div>
-            )}
+              <div className="w-px h-4 bg-white/20 mx-1"></div>
+              <button onClick={() => moveLayer(selectedEl.id, 'up')} className="p-1.5 rounded hover:bg-white/10 text-gray-300" title="Traer al frente"><ArrowUp size={16}/></button>
+              <button onClick={() => moveLayer(selectedEl.id, 'down')} className="p-1.5 rounded hover:bg-white/10 text-gray-300" title="Enviar atrás"><ArrowDown size={16}/></button>
+              <div className="w-px h-4 bg-white/20 mx-1"></div>
+              <button onClick={() => duplicateElement(selectedEl.id)} className="p-1.5 rounded hover:bg-white/10 text-gray-300" title="Duplicar"><Copy size={16}/></button>
+              <button onClick={() => deleteElement(selectedEl.id)} className="p-1.5 rounded hover:bg-red-500/20 text-red-400" title="Eliminar"><Trash2 size={16}/></button>
+            </div>
+          )}
 
-            {product?.type === 'banner' && (
-              <div>
-                <label className="block text-xs text-slate-500 dark:text-slate-400 mb-1">Tamaño</label>
-                <select 
-                  value={size} 
-                  onChange={(e) => setSize(e.target.value)}
-                  className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded px-3 py-2 text-sm text-slate-900 dark:text-white focus:outline-none focus:border-blue-500 transition-colors"
-                >
-                  <option value="60x90cm">60x90 cm</option>
-                  <option value="1x2m">1x2 m</option>
-                  <option value="2x3m">2x3 m</option>
-                  <option value="3x4m">3x4 m</option>
-                </select>
+          {/* Zoom Controls */}
+          <div className="absolute bottom-6 right-6 bg-[#070B18]/80 backdrop-blur border border-white/10 rounded-full flex items-center p-1 shadow-lg z-20">
+            <button onClick={() => setZoom(z => Math.max(0.1, z - 0.1))} className="p-2 text-gray-400 hover:text-white hover:bg-white/5 rounded-full transition-colors"><Minus size={16}/></button>
+            <span className="text-xs font-medium w-12 text-center text-gray-300">{Math.round(zoom * 100)}%</span>
+            <button onClick={() => setZoom(z => Math.min(3, z + 0.1))} className="p-2 text-gray-400 hover:text-white hover:bg-white/5 rounded-full transition-colors"><Plus size={16}/></button>
+          </div>
+        </main>
+
+        {/* ─── RIGHT SIDEBAR ─── */}
+        <aside className="w-[260px] bg-[#0D1B3E] border-l border-[#00E5FF]/20 flex flex-col shrink-0 z-20">
+          <div className="p-4 border-b border-white/5">
+            <h2 className="text-sm font-semibold uppercase tracking-wider text-gray-400">Propiedades</h2>
+          </div>
+
+          <div className="flex-1 overflow-y-auto custom-scrollbar">
+            {selectedEl ? (
+              <div className="p-4 space-y-6">
+                {/* Text Properties */}
+                {selectedEl.type === 'text' && (
+                  <div className="space-y-4">
+                    <div>
+                      <label className="text-xs text-gray-500 mb-1 block">Texto</label>
+                      <textarea 
+                        value={selectedEl.content}
+                        onChange={(e) => updateElement(selectedEl.id, { content: e.target.value })}
+                        className="w-full bg-[#070B18] border border-white/10 rounded-lg p-2 text-sm outline-none focus:border-[#00E5FF] resize-none h-20"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-xs text-gray-500 mb-1 block">Fuente</label>
+                      <select 
+                        value={selectedEl.fontFamily || 'Inter'}
+                        onChange={(e) => updateElement(selectedEl.id, { fontFamily: e.target.value })}
+                        className="w-full bg-[#070B18] border border-white/10 rounded-lg p-2 text-sm outline-none focus:border-[#00E5FF] appearance-none"
+                      >
+                        {FONTS.map(f => <option key={f} value={f}>{f}</option>)}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="text-xs text-gray-500 mb-1 block">Tamaño ({selectedEl.fontSize}px)</label>
+                      <input 
+                        type="range" min="8" max="150" 
+                        value={selectedEl.fontSize || 16}
+                        onChange={(e) => updateElement(selectedEl.id, { fontSize: Number(e.target.value) })}
+                        className="w-full accent-[#00E5FF]"
+                      />
+                    </div>
+                  </div>
+                )}
+
+                {/* Transform Properties */}
+                <div className="space-y-4 pt-4 border-t border-white/5">
+                  <h3 className="text-xs font-semibold text-gray-400 uppercase">Transformación</h3>
+                  
+                  <div className="grid grid-cols-2 gap-2">
+                    <div className="bg-[#070B18] border border-white/10 rounded-lg p-2 flex items-center gap-2">
+                      <span className="text-xs text-gray-500">X</span>
+                      <input type="number" value={Math.round(selectedEl.x)} onChange={(e) => updateElement(selectedEl.id, { x: Number(e.target.value) })} className="w-full bg-transparent text-sm outline-none" />
+                    </div>
+                    <div className="bg-[#070B18] border border-white/10 rounded-lg p-2 flex items-center gap-2">
+                      <span className="text-xs text-gray-500">Y</span>
+                      <input type="number" value={Math.round(selectedEl.y)} onChange={(e) => updateElement(selectedEl.id, { y: Number(e.target.value) })} className="w-full bg-transparent text-sm outline-none" />
+                    </div>
+                    <div className="bg-[#070B18] border border-white/10 rounded-lg p-2 flex items-center gap-2">
+                      <span className="text-xs text-gray-500">W</span>
+                      <input type="number" value={Math.round(selectedEl.width)} onChange={(e) => updateElement(selectedEl.id, { width: Number(e.target.value) })} className="w-full bg-transparent text-sm outline-none" />
+                    </div>
+                    <div className="bg-[#070B18] border border-white/10 rounded-lg p-2 flex items-center gap-2">
+                      <span className="text-xs text-gray-500">H</span>
+                      <input type="number" value={Math.round(selectedEl.height)} onChange={(e) => updateElement(selectedEl.id, { height: Number(e.target.value) })} className="w-full bg-transparent text-sm outline-none" />
+                    </div>
+                  </div>
+
+                  <div>
+                    <div className="flex justify-between mb-1">
+                      <label className="text-xs text-gray-500">Rotación</label>
+                      <span className="text-xs text-gray-400">{selectedEl.rotation}°</span>
+                    </div>
+                    <input 
+                      type="range" min="0" max="360" 
+                      value={selectedEl.rotation}
+                      onChange={(e) => updateElement(selectedEl.id, { rotation: Number(e.target.value) })}
+                      className="w-full accent-[#00E5FF]"
+                    />
+                  </div>
+
+                  <div>
+                    <div className="flex justify-between mb-1">
+                      <label className="text-xs text-gray-500">Opacidad</label>
+                      <span className="text-xs text-gray-400">{selectedEl.opacity}%</span>
+                    </div>
+                    <input 
+                      type="range" min="0" max="100" 
+                      value={selectedEl.opacity}
+                      onChange={(e) => updateElement(selectedEl.id, { opacity: Number(e.target.value) })}
+                      className="w-full accent-[#00E5FF]"
+                    />
+                  </div>
+
+                  {/* Border and Shadow Toggles */}
+                  <div className="space-y-3 pt-4 border-t border-white/5">
+                    <h3 className="text-xs font-semibold text-gray-400 uppercase">Efectos</h3>
+                    <label className="flex items-center justify-between cursor-pointer group">
+                      <span className="text-xs text-gray-300 group-hover:text-white transition-colors">Borde</span>
+                      <div className="relative">
+                        <input type="checkbox" className="sr-only peer" />
+                        <div className="w-8 h-4 bg-white/10 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-[#00E5FF]"></div>
+                      </div>
+                    </label>
+                    <label className="flex items-center justify-between cursor-pointer group">
+                      <span className="text-xs text-gray-300 group-hover:text-white transition-colors">Sombra</span>
+                      <div className="relative">
+                        <input type="checkbox" className="sr-only peer" />
+                        <div className="w-8 h-4 bg-white/10 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-[#00E5FF]"></div>
+                      </div>
+                    </label>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div className="p-8 text-center flex flex-col items-center justify-center h-48 text-gray-500">
+                <MousePointer2 size={32} className="mb-3 opacity-20" />
+                <p className="text-sm">Selecciona un elemento para editar sus propiedades</p>
               </div>
             )}
 
-            <div>
-              <label className="block text-xs text-slate-500 dark:text-slate-400 mb-1">Cantidad</label>
-              <div className="flex items-center bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded overflow-hidden transition-colors">
-                <button onClick={() => setQuantity(q => Math.max(1, q - 1))} className="px-3 py-1 text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors">-</button>
-                <input type="number" value={quantity} onChange={(e) => setQuantity(Math.max(1, Number(e.target.value)))} className="w-full text-center bg-transparent text-sm font-bold text-slate-900 dark:text-white focus:outline-none" />
-                <button onClick={() => setQuantity(q => q + 1)} className="px-3 py-1 text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors">+</button>
+            {/* Layers Panel */}
+            <div className="mt-auto border-t border-white/5">
+              <div className="p-4 border-b border-white/5 bg-[#070B18]/50">
+                <h3 className="text-xs font-semibold text-gray-400 uppercase">Capas</h3>
+              </div>
+              <div className="p-2 space-y-1">
+                {elements.slice().reverse().map(el => (
+                  <div 
+                    key={el.id}
+                    onClick={() => setSelectedId(el.id)}
+                    className={`flex items-center justify-between p-2 rounded-lg cursor-pointer transition-colors ${selectedId === el.id ? 'bg-[#00E5FF]/10 border border-[#00E5FF]/30' : 'hover:bg-white/5 border border-transparent'}`}
+                  >
+                    <div className="flex items-center gap-2 overflow-hidden">
+                      {el.type === 'text' ? <Type size={14} className="text-gray-400 shrink-0"/> : el.type === 'splash' ? <Droplet size={14} className="text-gray-400 shrink-0"/> : <Square size={14} className="text-gray-400 shrink-0"/>}
+                      <span className="text-xs truncate text-gray-300">
+                        {el.type === 'text' ? el.content : el.type === 'splash' ? 'Mancha de tinta' : 'Forma'}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-1 shrink-0">
+                      <button onClick={(e) => { e.stopPropagation(); updateElement(el.id, { visible: !el.visible }); }} className="p-1 hover:bg-white/10 rounded text-gray-400 hover:text-white">
+                        {el.visible ? <Eye size={12}/> : <EyeOff size={12}/>}
+                      </button>
+                      <button onClick={(e) => { e.stopPropagation(); updateElement(el.id, { locked: !el.locked }); }} className="p-1 hover:bg-white/10 rounded text-gray-400 hover:text-white">
+                        {el.locked ? <Lock size={12}/> : <Unlock size={12}/>}
+                      </button>
+                    </div>
+                  </div>
+                ))}
+                {elements.length === 0 && (
+                  <div className="text-center py-4 text-xs text-gray-600">No hay capas</div>
+                )}
               </div>
             </div>
           </div>
+        </aside>
 
-          <div className="pt-4 border-t border-slate-200 dark:border-slate-700 mt-4 transition-colors">
-            <div className="flex items-center justify-between mb-4">
-              <span className="text-slate-500 dark:text-slate-400">Total</span>
-              <span className="text-2xl font-bold text-blue-600 dark:text-blue-400">${totalPrice.toFixed(2)}</span>
-            </div>
-            <button 
-              onClick={() => onNavigate('checkout', product || undefined)}
-              className="w-full py-3 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded-xl transition-colors flex items-center justify-center gap-2 shadow-lg"
-            >
-              <ShoppingCart size={18} /> Hacer Pedido
-            </button>
-          </div>
-        </div>
-      </motion.div>
+      </div>
     </div>
   );
 }
